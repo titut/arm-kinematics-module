@@ -732,14 +732,7 @@ class FiveDOFRobot:
         self.calc_DH_matrices()
         self.T_cumulative = [np.eye(4)]
         for i in range(self.num_dof):
-            if i == 4:
-                self.T_cumulative.append(
-                    self.T_cumulative[-1]
-                    @ self.DH[i]
-                    @ self.DH_matrix(self.theta[4], self.l5, 0, 0)
-                )
-            else:
-                self.T_cumulative.append(self.T_cumulative[-1] @ self.DH[i])
+            self.T_cumulative.append(self.T_cumulative[-1] @ self.DH[i])
         J = []
 
         for i in range(4):
@@ -755,7 +748,7 @@ class FiveDOFRobot:
         )
 
         theta_dot = new_jacobian @ vel
-        theta_dot = theta_dot / 20 / (np.max(theta_dot) + 1)
+        theta_dot = theta_dot / 10 / (np.max(np.absolute(theta_dot)) + 1)
         self.theta = self.theta + theta_dot
 
         ########################################
@@ -787,7 +780,13 @@ class FiveDOFRobot:
     def calc_DH_matrices(self):
         """Calculates all DH Matrices of the system"""
         # DH table parameters
-        theta_i_table = [self.theta[0], self.theta[1], self.theta[2], self.theta[3], 0]
+        theta_i_table = [
+            self.theta[0],
+            self.theta[1],
+            self.theta[2],
+            self.theta[3],
+            self.theta[4],
+        ]
         d_table = [self.l1, 0, 0, 0, self.l5]
         r_table = [0, self.l2, self.l3, self.l4, 0]
         alpha_table = [np.pi / 2, np.pi, np.pi, 0, 0]
