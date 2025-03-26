@@ -1,4 +1,4 @@
-from math import sin, cos
+from math import sin, cos, asin, acos, atan2, sqrt
 from math import radians as rad
 import numpy as np
 from matplotlib.figure import Figure
@@ -268,8 +268,8 @@ class TwoDOFRobot:
         """
         Initializes a 2-DOF robot with default arm segment lengths and joint angles.
         """
-        self.l1 = 0.30  # Length of the first arm segment
-        self.l2 = 0.25  # Length of the second arm segment
+        self.l1 = 0.099  # Length of the first arm segment
+        self.l2 = 0.095  # Length of the second arm segment
 
         self.theta = [PI / 2, -PI / 4]  # Joint angles (in radians)
         self.theta_limits = [[-PI, PI], [-PI + 0.261, PI - 0.261]]  # Joint limits
@@ -305,11 +305,29 @@ class TwoDOFRobot:
             soln (int, optional): The solution branch to use. Defaults to 0 (first solution).
         """
         x, y = EE.x, EE.y
-        l1, l2 = self.l1, self.l2
 
         ########################################
 
-        # insert your code here
+        if soln == 0:
+            self.theta[1] = acos(
+                (x**2 + y**2 - self.l1**2 - self.l2**2) / (2 * self.l1 * self.l2)
+            )
+
+            alpha = atan2(
+                self.l2 * sin(self.theta[1]), self.l1 + self.l2 * cos(self.theta[1])
+            )
+            gamma = atan2(y, x)
+            self.theta[0] = gamma - alpha
+        elif soln == 1:
+            self.theta[1] = -acos(
+                (x**2 + y**2 - self.l1**2 - self.l2**2) / (2 * self.l1 * self.l2)
+            )
+
+            alpha = atan2(
+                self.l2 * sin(self.theta[1]), self.l1 + self.l2 * cos(self.theta[1])
+            )
+            gamma = atan2(y, x)
+            self.theta[0] = gamma - alpha
 
         ########################################
 
@@ -330,7 +348,7 @@ class TwoDOFRobot:
 
         ########################################
 
-        # insert your code here
+        # insert code here
 
         ########################################
 
@@ -503,8 +521,9 @@ class ScaraRobot:
         """
         ########################################
 
-        z = (theta[2] + 180) / 360 * (self.l1 + self.l3 - self.l5)
-        self.theta = [rad(theta[0]), rad(theta[1]), z]
+        if radians == False:
+            z = (theta[2] + 180) / 360 * (self.l1 + self.l3 - self.l5)
+            self.theta = [rad(theta[0]), rad(theta[1]), z]
 
         ########################################
 
@@ -524,7 +543,28 @@ class ScaraRobot:
 
         ########################################
 
-        # insert your code here
+        if soln == 0:
+            self.theta[1] = acos(
+                (x**2 + y**2 - self.l2**2 - self.l4**2) / (2 * self.l2 * self.l4)
+            )
+
+            alpha = atan2(
+                self.l4 * sin(self.theta[1]), self.l2 + self.l4 * cos(self.theta[1])
+            )
+            gamma = atan2(y, x)
+            self.theta[0] = gamma - alpha
+        elif soln == 1:
+            self.theta[1] = -acos(
+                (x**2 + y**2 - self.l2**2 - self.l4**2) / (2 * self.l2 * self.l4)
+            )
+
+            alpha = atan2(
+                self.l4 * sin(self.theta[1]), self.l2 + self.l4 * cos(self.theta[1])
+            )
+            gamma = atan2(y, x)
+            self.theta[0] = gamma - alpha
+
+        self.theta[2] = 0.38 - z
 
         ########################################
 
@@ -704,9 +744,59 @@ class FiveDOFRobot:
         """
         ########################################
 
-        # insert your code here
+        self.theta[0] = atan2(EE.y, EE.x)
+
+        rot_z_theta1 = np.array(
+            [
+                [cos(self.theta[0]), -sin(self.theta[0]), 0],
+                [sin(self.theta[0]), cos(self.theta[0]), 0],
+                [0, 0, 1],
+            ]
+        )
+        rotz = rad(EE.rotz)
+        rot_y = np.array(
+            [
+                [cos(np.pi / 2 + rotz), 0, sin(np.pi / 2 + rotz)],
+                [0, 1, 0],
+                [-sin(np.pi / 2 + rotz), 0, cos(np.pi / 2 + rotz)],
+            ]
+        )
+        k = np.transpose(np.array([[0, 0, 1]]))
+        r_06 = rot_z_theta1 @ rot_y
+        t_35 = (self.l4 + self.l5) * r_06 @ k
+
+        p_wrist_x = EE.x - t_35[0]
+        p_wrist_y = EE.y - t_35[1]
+        p_wrist_z = EE.z - t_35[2]
+
+        # print(f"Target - x: {p_wrist_x}, y: {p_wrist_y}, z: {p_wrist_z}")
+
+        rx = sqrt(p_wrist_x**2 + p_wrist_y**2)
+        ry = p_wrist_z - self.l1
+
+        self.theta[2] = acos(
+            (rx**2 + ry**2 - self.l2**2 - self.l3**2) / (2 * self.l2 * self.l3)
+        )
+        alpha = atan2(
+            self.l2 * sin(self.theta[2]), self.l2 + self.l3 * cos(self.theta[2])
+        )
+        gamma = atan2(ry, rx)
+        self.theta[1] = (gamma - alpha) - (np.pi / 2)
+        self.theta[2] = -self.theta[2]
+
+        self.calc_DH_matrices()
+        r_03 = (self.DH[0] @ self.DH[1] @ self.DH[2])[:3, :3]
+
+        r_35 = np.transpose(r_03) @ r_06
+
+        self.theta[3] = atan2(r_35[0][0], r_35[0][2])
+
+        rotx = rad(EE.rotx)
+        self.theta[4] = rotx
 
         ########################################
+
+        self.calc_robot_points()
 
     def calc_numerical_ik(self, EE: EndEffector, tol=0.01, ilimit=50):
         """Calculate numerical inverse kinematics based on input coordinates."""
@@ -819,6 +909,8 @@ class FiveDOFRobot:
         # Calculate the robot points by applying the cumulative transformations
         for i in range(1, 6):
             self.points[i] = self.T_cumulative[i] @ self.points[0]
+
+        # print(f"Actual - x: {self.points[3][0]}, y: {self.points[3][1]}, z: {self.points[3][2]}")
 
         # Calculate EE position and rotation
         self.EE_axes = self.T_cumulative[-1] @ np.array(
