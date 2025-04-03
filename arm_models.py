@@ -1,4 +1,4 @@
-from math import sin, cos, asin, acos, atan2, sqrt
+from math import sin, cos, asin, acos, atan2, sqrt, degrees, atan
 from math import radians as rad
 import numpy as np
 from matplotlib.figure import Figure
@@ -744,39 +744,57 @@ class FiveDOFRobot:
         """
         ########################################
 
+        # calculating theta_1
         self.theta[0] = atan2(EE.y, EE.x)
 
-        rot_z_theta1 = np.array(
+        k = np.transpose(np.array([[0, 0, 1]]))
+        rotx = np.array(
             [
-                [cos(self.theta[0]), -sin(self.theta[0]), 0],
-                [sin(self.theta[0]), cos(self.theta[0]), 0],
+                [1, 0, 0],
+                [0, cos(EE.rotx), -sin(EE.rotx)],
+                [0, sin(EE.rotx), cos(EE.rotx)],
+            ]
+        )
+        roty = np.array(
+            [
+                [cos(EE.roty), 0, sin(EE.roty)],
+                [0, 1, 0],
+                [-sin(EE.roty), 0, cos(EE.roty)],
+            ]
+        )
+        rotz = np.array(
+            [
+                [cos(EE.rotz), -sin(EE.rotz), 0],
+                [sin(EE.rotz), cos(EE.rotz), 0],
                 [0, 0, 1],
             ]
         )
-        rotz = rad(EE.rotz)
-        rot_y = np.array(
-            [
-                [cos(np.pi / 2 + rotz), 0, sin(np.pi / 2 + rotz)],
-                [0, 1, 0],
-                [-sin(np.pi / 2 + rotz), 0, cos(np.pi / 2 + rotz)],
-            ]
-        )
-        k = np.transpose(np.array([[0, 0, 1]]))
-        r_06 = rot_z_theta1 @ rot_y
+
+        # calculating r_06 using euler ZYX convention
+        r_06 = rotz @ roty @ rotx
         t_35 = (self.l4 + self.l5) * r_06 @ k
 
+        # calculating p_wrist
         p_wrist_x = EE.x - t_35[0]
         p_wrist_y = EE.y - t_35[1]
         p_wrist_z = EE.z - t_35[2]
 
-        # print(f"Target - x: {p_wrist_x}, y: {p_wrist_y}, z: {p_wrist_z}")
-
+        # calculating new x and y for 2-DOF solution
         rx = sqrt(p_wrist_x**2 + p_wrist_y**2)
         ry = p_wrist_z - self.l1
 
-        self.theta[2] = acos(
-            (rx**2 + ry**2 - self.l2**2 - self.l3**2) / (2 * self.l2 * self.l3)
-        )
+        # elbow down
+        if soln == 0:
+            self.theta[2] = acos(
+                (rx**2 + ry**2 - self.l2**2 - self.l3**2) / (2 * self.l2 * self.l3)
+            )
+        # elbow up
+        else:
+            self.theta[2] = -acos(
+                (rx**2 + ry**2 - self.l2**2 - self.l3**2) / (2 * self.l2 * self.l3)
+            )
+
+        # calculate theta 3
         alpha = atan2(
             self.l2 * sin(self.theta[2]), self.l2 + self.l3 * cos(self.theta[2])
         )
@@ -786,14 +804,40 @@ class FiveDOFRobot:
 
         self.calc_DH_matrices()
         r_03 = (self.DH[0] @ self.DH[1] @ self.DH[2])[:3, :3]
-
         r_35 = np.transpose(r_03) @ r_06
 
-        self.theta[3] = atan2(r_35[0][0], r_35[0][2])
+        # calculate theta 4 and 5
+        self.theta[3] = atan2(r_35[1][2], r_35[0][2])
+        self.theta[4] = atan(r_35[2][0] / r_35[2][1])
 
-        rotx = rad(EE.rotx)
-        self.theta[4] = rotx
+        # enforce joint limits
+        if (
+            self.theta[0] < (-2 * np.pi / 3)
+            or self.theta[0] > (2 * np.pi / 3)
+            or self.theta[1] < (-np.pi / 2)
+            or self.theta[1] > (np.pi / 2)
+            or self.theta[2] < (-2 * np.pi / 3)
+            or self.theta[2] > (2 * np.pi / 3)
+            or self.theta[3] < (-5 * np.pi / 9)
+            or self.theta[3] > (5 * np.pi / 9)
+            or self.theta[4] < (-np.pi / 2)
+            or self.theta[4] > (np.pi / 2)
+        ):
+            print([degrees(i) for i in self.theta])
+            self.theta = [0, 0, 0, 0, 0]
+            print("HERE")
 
+        # check that it is giving the right EE location
+        self.calc_DH_matrices()
+        self.T_cumulative = [np.eye(4)]
+        for i in range(self.num_dof):
+            self.T_cumulative.append(self.T_cumulative[-1] @ self.DH[i])
+
+        estimated_EE = self.T_cumulative[5] @ np.array([0, 0, 0, 1])
+        diff = estimated_EE - np.array([EE.x, EE.y, EE.z, 1])
+        if np.linalg.norm(diff) > 0.05:
+            print("HERE!")
+            self.theta = [0, 0, 0, 0, 0]
         ########################################
 
         self.calc_robot_points()
