@@ -847,9 +847,46 @@ class FiveDOFRobot:
 
         ########################################
 
-        # insert your code here
+        # define initial guess
+        original_points = [
+            self.ee.x,
+            self.ee.y,
+            self.ee.z,
+            self.ee.rotx,
+            self.ee.roty,
+            self.ee.rotz,
+        ]
+        epsilon = 0.001
+        desired_coords = [EE.x, EE.y, EE.z, EE.rotx, EE.roty, EE.rotz]
+        points = original_points
 
+        # calc initial variable
+        error_var = [
+            des_i - theta_i for des_i, theta_i in zip(desired_coords, points)
+        ]  # 1x6 matrix
+        i = 0
+        while (sum(np.absolute(error_var)) / 6 >= epsilon) & (i < 3000):
+            pseudojacobian = self.calc_pseduojacobian()  # 6x5 matrix
+            new_points = pseudojacobian @ np.transpose(np.array(error_var))
+            self.theta = self.theta + new_points  # 1x5 matrix \
+            self.calc_points(self.theta)
+            points = [
+                self.ee.x,
+                self.ee.y,
+                self.ee.z,
+                self.ee.rotx,
+                self.ee.roty,
+                self.ee.rotz,
+            ]
+            error_var = [
+                des_i - theta_i for des_i, theta_i in zip(desired_coords, points)
+            ]
+            i += 1
+
+        [EE.x, EE.y, EE.z, EE.rotx, EE.roty, EE.rotz] = original_points
         ########################################
+
+        # Recompute robot points based on updated joint angles
         self.calc_forward_kinematics(self.theta, radians=True)
 
     def calc_velocity_kinematics(self, vel: list):
@@ -974,3 +1011,47 @@ class FiveDOFRobot:
         self.EE_axes = np.array(
             [self.T_ee[:3, i] * 0.075 + self.points[-1][:3] for i in range(3)]
         )
+
+    def calc_pseduojacobian(self):
+        self.calc_DH_matrices()
+        self.T_cumulative = [np.eye(4)]
+        for i in range(self.num_dof):
+            self.T_cumulative.append(self.T_cumulative[-1] @ self.DH[i])
+        J_l = []
+        J_w = []
+
+        for i in range(4):
+            k = np.array([0, 0, 1])
+            rot_matrix = self.T_cumulative[i][:3, :3]
+            z = rot_matrix @ k
+            r = (self.points[5] - self.points[i])[:3]
+            J_w.append(z)
+            J_l.append(np.cross(z, r))
+
+        # Construct the Jacobian matrix
+        J_l.append([0, 0, 0])  # Adding a zero row for completeness
+        J_w.append([0, 0, 0])  # Adding a zero row for completeness
+
+        jacobian_l = np.transpose(np.array(J_l))
+        jacobian_w = np.transpose(np.array(J_w))
+        jacobian = np.concatenate((jacobian_l, jacobian_w), axis=0)
+
+        # Calculate pseudo-Jacobian matrix using the transpose method
+        print(jacobian)
+        if np.linalg.matrix_rank(jacobian) < min(jacobian.shape):
+            # Handle near singularity or underdetermined system
+            print(
+                "Warning: Jacobian matrix is not full rank. Adjusting for pseudo-inverse calculation."
+            )
+
+            # Use a regularized pseudo-inverse calculation
+            new_jacobian = np.transpose(jacobian) @ np.linalg.inv(
+                jacobian @ np.transpose(jacobian) + np.eye(jacobian.shape[0]) * 1e-5
+            )
+        else:
+            # Calculate pseudo-Jacobian matrix using the transpose method
+            new_jacobian = np.transpose(jacobian) @ np.linalg.inv(
+                jacobian @ np.transpose(jacobian)
+            )
+
+        return new_jacobian
