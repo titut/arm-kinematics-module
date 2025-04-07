@@ -83,6 +83,11 @@ $ python main_arm.py --robot_type scara
 <img src = "media/arm-kinematics-viz-tool.png">
 
 
+### Mini-Project 2: Inverse Kinematics
+
+
+
+
 ### Generative AI Use Disclosure
 - Please make sure to briefly describe what and how generative AI tools were used in developing the contents of your work.
 - Acceptable use:
