@@ -85,7 +85,23 @@ $ python main_arm.py --robot_type scara
 
 ### Mini-Project 2: Inverse Kinematics
 
+- To expand on the user usage guide, by pressing solve 1, the visualization tool will try to solve for an elbow down solution.
 
+<img src = "media/elbow_down_gif.gif">
+
+- By pressing solve 2, the visualization tool will try to solve for an elbow up solution.
+
+<img src = "media/elbow_up_gif.gif">
+
+- The inverse kinematics also checks for the following elbow joint limits:
+    - theta 1: (-120, 120)
+    - theta 2: (-90, 90)
+    - theta 3: (-120, 120)
+    - theta 4: (-100, 100)
+    - theta 5: (-90, 90)
+- If any joints are not within the limit, the arm resets every angle to zero.
+
+<img src = "media/enforce_joint_limit.gif">
 
 
 ### Generative AI Use Disclosure
